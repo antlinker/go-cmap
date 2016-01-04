@@ -1,5 +1,12 @@
 # go-cmap
-Golang concurrency map
+
+> Golang concurrency map
+
+## Usage
+
+``` bash
+$ go get github.com/antlinker/go-cmap
+```
 
 ## Benchmark
 
