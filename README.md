@@ -1,6 +1,13 @@
 # go-cmap
 Golang concurrency map
 
+## Benchmark
+
+```
+BenchmarkMap-8                   1000000              2105 ns/op
+BenchmarkConcurrencyMap-8        1000000              1268 ns/op
+```
+
 ## License
 
 	Copyright 2015.All rights reserved.
