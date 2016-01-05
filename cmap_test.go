@@ -1,10 +1,56 @@
-package cmap
+package cmap_test
 
 import (
 	"fmt"
+	"runtime"
 	"sync"
+	"sync/atomic"
 	"testing"
+
+	. "github.com/antlinker/go-cmap"
 )
+
+type TestMap struct {
+	gomap map[interface{}]interface{}
+
+	cmap        ConcurrencyMap
+	gomapnolock map[interface{}]interface{}
+	sync.RWMutex
+}
+
+func NewTestMap() *TestMap {
+	return &TestMap{gomap: make(map[interface{}]interface{}), cmap: NewConcurrencyMap(), gomapnolock: make(map[interface{}]interface{}, 1024*1024)}
+}
+func (m *TestMap) GomapNolockGetSet(key interface{}, value interface{}) bool {
+
+	m.gomap[key] = value
+
+	runtime.Gosched()
+
+	newvalue := m.gomap[key]
+
+	return newvalue == value
+
+}
+func (m *TestMap) GomapGetSet(key interface{}, value interface{}) bool {
+	m.Lock()
+	m.gomap[key] = value
+	m.Unlock()
+	runtime.Gosched()
+	m.RLock()
+	newvalue := m.gomap[key]
+	m.RUnlock()
+	return newvalue == value
+
+}
+func (m *TestMap) ConcurrencymapGetSet(key interface{}, value interface{}) bool {
+	err := m.cmap.Set(key, value)
+	if err != nil {
+		return false
+	}
+	newvalue, _ := m.cmap.Get(key)
+	return newvalue == value
+}
 
 func TestConcurrencyMap(t *testing.T) {
 	cmap := NewConcurrencyMap()
@@ -21,31 +67,54 @@ func TestConcurrencyMap(t *testing.T) {
 	t.Log("Foo value:", val)
 	t.Log("Map value:", cmap.ToMap(), ",Map len:", cmap.Len())
 }
-
-func BenchmarkMap(b *testing.B) {
+func BenchmarkNolockGoMap(b *testing.B) {
 	b.StopTimer()
-	mp := make(map[interface{}]interface{})
-	var lock sync.RWMutex
+	testmap := NewTestMap()
 	b.StartTimer()
-	for i := 0; i < b.N; i++ {
-		go func(i int) {
-			lock.Lock()
-			mp[fmt.Sprintf("foo_%d", i)] = i
-			lock.Unlock()
-		}(i)
-	}
-}
+	var i int64 = 0
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			n := atomic.AddInt64(&i, 1)
+			var key = fmt.Sprintf("foo_%d", n)
+			result := testmap.GomapGetSet(key, n)
+			if !result {
+				b.Error("执行错误错误结果")
+			}
+		}
+	})
 
+}
+func BenchmarkGoMap(b *testing.B) {
+	b.StopTimer()
+	testmap := NewTestMap()
+	b.StartTimer()
+	var i int64 = 0
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			n := atomic.AddInt64(&i, 1)
+			var key = fmt.Sprintf("foo_%d", n)
+			result := testmap.GomapGetSet(key, n)
+			if !result {
+				b.Error("执行错误错误结果")
+			}
+		}
+	})
+
+}
 func BenchmarkConcurrencyMap(b *testing.B) {
 	b.StopTimer()
-	cmap := NewConcurrencyMap()
+	testmap := NewTestMap()
 	b.StartTimer()
-	for i := 0; i < b.N; i++ {
-		go func(i int) {
-			err := cmap.Set(fmt.Sprintf("foo_%d", i), i)
-			if err != nil {
-				b.Error(err)
+	var i int64 = 0
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			n := atomic.AddInt64(&i, 1)
+			var key = fmt.Sprintf("foo_%d", n)
+			result := testmap.ConcurrencymapGetSet(key, n)
+			if !result {
+				b.Error("执行错误错误结果")
 			}
-		}(i)
-	}
+		}
+	})
+
 }

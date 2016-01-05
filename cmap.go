@@ -18,8 +18,11 @@ type ConcurrencyMap interface {
 	Get(key interface{}) (interface{}, error)
 	// Set 给指定的键设置元素值。若该键值已存在，则替换
 	Set(key interface{}, elem interface{}) error
-	// SetIfAbsent 给指定的键设置元素值。若该键值已存在，则不替换
-	SetIfAbsent(key interface{}, elem interface{}) error
+	// SetIfAbsent 给指定的键设置元素值。若该键值已存在，则不替换,并返回以存在的值
+	//返回值 value 为执行方法后key 键对应的实际值
+	//返回值isnew true是新值，false是原来的值
+
+	SetIfAbsent(key interface{}, elem interface{}) (value interface{}, isnew bool)
 	// Remove 删除给定键值对应的键值对，并返回旧的元素值。若没有旧元素的值则返回nil
 	Remove(key interface{}) (interface{}, error)
 	// Contains 判断是否包含给定的键值
@@ -92,8 +95,9 @@ func (cm *concurrencyMap) Get(key interface{}) (interface{}, error) {
 		return nil, err
 	}
 	item.RLock()
-	defer item.RUnlock()
-	return item.items[key], nil
+	v := item.items[key]
+	item.RUnlock()
+	return v, nil
 }
 
 func (cm *concurrencyMap) Set(key interface{}, elem interface{}) error {
@@ -102,23 +106,23 @@ func (cm *concurrencyMap) Set(key interface{}, elem interface{}) error {
 		return err
 	}
 	item.Lock()
-	defer item.Unlock()
 	item.items[key] = elem
+	item.Unlock()
 	return nil
 }
 
-func (cm *concurrencyMap) SetIfAbsent(key interface{}, elem interface{}) error {
+func (cm *concurrencyMap) SetIfAbsent(key interface{}, elem interface{}) (interface{}, bool) {
 	item, err := cm.getItem(key)
 	if err != nil {
-		return err
+		return item, false
 	}
 	item.Lock()
-	defer item.Unlock()
 	_, ok := item.items[key]
 	if !ok {
 		item.items[key] = elem
 	}
-	return nil
+	item.Unlock()
+	return elem, true
 }
 
 func (cm *concurrencyMap) Remove(key interface{}) (interface{}, error) {
@@ -127,11 +131,12 @@ func (cm *concurrencyMap) Remove(key interface{}) (interface{}, error) {
 		return nil, err
 	}
 	item.Lock()
-	defer item.Unlock()
+
 	elem, ok := item.items[key]
 	if ok {
 		delete(item.items, key)
 	}
+	item.Unlock()
 	return elem, nil
 }
 
@@ -141,8 +146,9 @@ func (cm *concurrencyMap) Contains(key interface{}) (bool, error) {
 		return false, err
 	}
 	item.RLock()
-	defer item.RUnlock()
+
 	_, ok := item.items[key]
+	item.RUnlock()
 	return ok, nil
 }
 
