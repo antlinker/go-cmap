@@ -21,12 +21,13 @@ type ConcurrencyMap interface {
 	// SetIfAbsent 给指定的键设置元素值。若该键值已存在，则不替换,并返回以存在的值
 	//返回值 value 为执行方法后key 键对应的实际值
 	//返回值isnew true是新值，false是原来的值
-
 	SetIfAbsent(key interface{}, elem interface{}) (value interface{}, isnew bool)
 	// Remove 删除给定键值对应的键值对，并返回旧的元素值。若没有旧元素的值则返回nil
 	Remove(key interface{}) (interface{}, error)
 	// Contains 判断是否包含给定的键值
 	Contains(key interface{}) (bool, error)
+	// GetElement 获取并发Map中的元素
+	GetElement() <-chan ConcurrencyElement
 	// ToMap 获取已包含的键值对所组成的字典值
 	ToMap() map[interface{}]interface{}
 	// Clear 清除所有的键值对
@@ -54,6 +55,12 @@ func NewConcurrencyMap(poolSizes ...uint) ConcurrencyMap {
 		size:  int(size),
 		pools: pools,
 	}
+}
+
+// ConcurrencyElement
+type ConcurrencyElement struct {
+	Key   interface{}
+	Value interface{}
 }
 
 type concurrencyItem struct {
@@ -131,7 +138,6 @@ func (cm *concurrencyMap) Remove(key interface{}) (interface{}, error) {
 		return nil, err
 	}
 	item.Lock()
-
 	elem, ok := item.items[key]
 	if ok {
 		delete(item.items, key)
@@ -146,10 +152,25 @@ func (cm *concurrencyMap) Contains(key interface{}) (bool, error) {
 		return false, err
 	}
 	item.RLock()
-
 	_, ok := item.items[key]
 	item.RUnlock()
 	return ok, nil
+}
+
+func (cm *concurrencyMap) GetElement() <-chan ConcurrencyElement {
+	chElement := make(chan ConcurrencyElement)
+	go func() {
+		for i := 0; i < cm.size; i++ {
+			item := cm.pools[i]
+			item.RLock()
+			for k, v := range item.items {
+				chElement <- ConcurrencyElement{Key: k, Value: v}
+			}
+			item.RUnlock()
+		}
+		close(chElement)
+	}()
+	return chElement
 }
 
 func (cm *concurrencyMap) ToMap() map[interface{}]interface{} {

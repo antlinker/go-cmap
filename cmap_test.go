@@ -10,9 +10,17 @@ import (
 	. "github.com/antlinker/go-cmap"
 )
 
-type TestMap struct {
-	gomap map[interface{}]interface{}
+func TestGetElement(t *testing.T) {
+	cmap := NewConcurrencyMap()
+	cmap.Set("foo", "bar")
+	for ele := range cmap.GetElement() {
+		t.Log("Element:", ele.Key, ele.Value)
+	}
+	t.Log("Success")
+}
 
+type TestMap struct {
+	gomap       map[interface{}]interface{}
 	cmap        ConcurrencyMap
 	gomapnolock map[interface{}]interface{}
 	sync.RWMutex
@@ -67,6 +75,7 @@ func TestConcurrencyMap(t *testing.T) {
 	t.Log("Foo value:", val)
 	t.Log("Map value:", cmap.ToMap(), ",Map len:", cmap.Len())
 }
+
 func BenchmarkNolockGoMap(b *testing.B) {
 	b.StopTimer()
 	testmap := NewTestMap()
@@ -82,8 +91,8 @@ func BenchmarkNolockGoMap(b *testing.B) {
 			}
 		}
 	})
-
 }
+
 func BenchmarkGoMap(b *testing.B) {
 	b.StopTimer()
 	testmap := NewTestMap()
@@ -99,8 +108,8 @@ func BenchmarkGoMap(b *testing.B) {
 			}
 		}
 	})
-
 }
+
 func BenchmarkConcurrencyMap(b *testing.B) {
 	b.StopTimer()
 	testmap := NewTestMap()
