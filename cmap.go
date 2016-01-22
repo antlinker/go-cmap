@@ -18,22 +18,26 @@ type ConcurrencyMap interface {
 	Get(key interface{}) (interface{}, error)
 	// Set 给指定的键设置元素值。若该键值已存在，则替换
 	Set(key interface{}, elem interface{}) error
-	// SetIfAbsent 给指定的键设置元素值。若该键值已存在，则不替换,并返回以存在的值
-	//返回值 value 为执行方法后key 键对应的实际值
-	//返回值isnew true是新值，false是原来的值
-	SetIfAbsent(key interface{}, elem interface{}) (value interface{}, isnew bool)
+	// SetIfAbsent 给指定的键设置元素值。
+	// 若该键值已存在，则不替换,并返回已经存在的值同时返回false
+	// 若改键值不存在，则增加该键值同时返回true
+	SetIfAbsent(key interface{}, elem interface{}) (interface{}, bool)
 	// Remove 删除给定键值对应的键值对，并返回旧的元素值。若没有旧元素的值则返回nil
 	Remove(key interface{}) (interface{}, error)
 	// Contains 判断是否包含给定的键值
 	Contains(key interface{}) (bool, error)
-	// GetElement 获取并发Map中的元素
-	GetElement() <-chan ConcurrencyElement
-	// ToMap 获取已包含的键值对所组成的字典值
-	ToMap() map[interface{}]interface{}
 	// Clear 清除所有的键值对
 	Clear()
 	// Len 获取键值对的数量
 	Len() int
+	// ToMap 获取已包含的键值对所组成的字典值
+	ToMap() map[interface{}]interface{}
+	// Elements 获取并发Map中的元素
+	Elements() <-chan ConcurrencyElement
+	// Keys 获取所有的键数据
+	Keys() []interface{}
+	// Values 获取所有的值数据
+	Values() []interface{}
 }
 
 // NewConcurrencyMap 创建并发的Map接口
@@ -57,7 +61,6 @@ func NewConcurrencyMap(poolSizes ...uint) ConcurrencyMap {
 	}
 }
 
-// ConcurrencyElement
 type ConcurrencyElement struct {
 	Key   interface{}
 	Value interface{}
@@ -69,6 +72,7 @@ type concurrencyItem struct {
 }
 
 type concurrencyMap struct {
+	sync.RWMutex
 	size  int
 	pools []*concurrencyItem
 }
@@ -157,35 +161,6 @@ func (cm *concurrencyMap) Contains(key interface{}) (bool, error) {
 	return ok, nil
 }
 
-func (cm *concurrencyMap) GetElement() <-chan ConcurrencyElement {
-	chElement := make(chan ConcurrencyElement)
-	go func() {
-		for i := 0; i < cm.size; i++ {
-			item := cm.pools[i]
-			item.RLock()
-			for k, v := range item.items {
-				chElement <- ConcurrencyElement{Key: k, Value: v}
-			}
-			item.RUnlock()
-		}
-		close(chElement)
-	}()
-	return chElement
-}
-
-func (cm *concurrencyMap) ToMap() map[interface{}]interface{} {
-	data := make(map[interface{}]interface{})
-	for i := 0; i < cm.size; i++ {
-		item := cm.pools[i]
-		item.RLock()
-		for k, v := range item.items {
-			data[k] = v
-		}
-		item.RUnlock()
-	}
-	return data
-}
-
 func (cm *concurrencyMap) Clear() {
 	for i := 0; i < cm.size; i++ {
 		item := cm.pools[i]
@@ -204,4 +179,59 @@ func (cm *concurrencyMap) Len() int {
 		item.RUnlock()
 	}
 	return count
+}
+
+func (cm *concurrencyMap) ToMap() map[interface{}]interface{} {
+	data := make(map[interface{}]interface{})
+	for i := 0; i < cm.size; i++ {
+		item := cm.pools[i]
+		item.RLock()
+		for k, v := range item.items {
+			data[k] = v
+		}
+		item.RUnlock()
+	}
+	return data
+}
+
+func (cm *concurrencyMap) Elements() <-chan ConcurrencyElement {
+	chElement := make(chan ConcurrencyElement)
+	go func() {
+		for i := 0; i < cm.size; i++ {
+			item := cm.pools[i]
+			item.RLock()
+			for k, v := range item.items {
+				chElement <- ConcurrencyElement{Key: k, Value: v}
+			}
+			item.RUnlock()
+		}
+		close(chElement)
+	}()
+	return chElement
+}
+
+func (cm *concurrencyMap) Keys() []interface{} {
+	var keys []interface{}
+	for i := 0; i < cm.size; i++ {
+		item := cm.pools[i]
+		item.RLock()
+		for k, _ := range item.items {
+			keys = append(keys, k)
+		}
+		item.RUnlock()
+	}
+	return keys
+}
+
+func (cm *concurrencyMap) Values() []interface{} {
+	var values []interface{}
+	for i := 0; i < cm.size; i++ {
+		item := cm.pools[i]
+		item.RLock()
+		for _, v := range item.items {
+			values = append(values, v)
+		}
+		item.RUnlock()
+	}
+	return values
 }
