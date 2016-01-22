@@ -11,8 +11,9 @@ $ go get github.com/antlinker/go-cmap
 ## Benchmark
 
 ```
-BenchmarkMap-8                   1000000              2105 ns/op
-BenchmarkConcurrencyMap-8        1000000              1268 ns/op
+BenchmarkGoMap-8                 2000000              1308 ns/op
+BenchmarkNolockGoMap-8           2000000              1172 ns/op
+BenchmarkConcurrencyMap-8        2000000               758 ns/op
 ```
 
 ## License
