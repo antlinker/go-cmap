@@ -61,6 +61,7 @@ func NewConcurrencyMap(poolSizes ...uint) ConcurrencyMap {
 	}
 }
 
+// ConcurrencyElement 存储的元素项
 type ConcurrencyElement struct {
 	Key   interface{}
 	Value interface{}
@@ -78,25 +79,23 @@ type concurrencyMap struct {
 }
 
 func (cm *concurrencyMap) getItem(key interface{}) (*concurrencyItem, error) {
-	var p []byte
+	var v interface{}
 	switch key.(type) {
-	case []byte:
-		p = key.([]byte)
 	case string:
-		p = []byte(key.(string))
+		v = []byte(key.(string))
+	case int:
+		v = int32(key.(int))
 	default:
-		buffer := new(bytes.Buffer)
-		err := binary.Write(buffer, binary.LittleEndian, key)
-		if err != nil {
-			return nil, err
-		}
-		p = buffer.Bytes()
+		v = key
 	}
-	hasher := fnv.New32()
-	_, err := hasher.Write(p)
+	buffer := new(bytes.Buffer)
+	err := binary.Write(buffer, binary.LittleEndian, v)
 	if err != nil {
 		return nil, err
 	}
+	defer buffer.Reset()
+	hasher := fnv.New32()
+	hasher.Write(buffer.Bytes())
 	return cm.pools[uint(hasher.Sum32())%uint(cm.size)], nil
 }
 
@@ -215,7 +214,7 @@ func (cm *concurrencyMap) Keys() []interface{} {
 	for i := 0; i < cm.size; i++ {
 		item := cm.pools[i]
 		item.RLock()
-		for k, _ := range item.items {
+		for k := range item.items {
 			keys = append(keys, k)
 		}
 		item.RUnlock()
