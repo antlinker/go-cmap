@@ -2,6 +2,7 @@ package cmap
 
 import (
 	"fmt"
+
 	"testing"
 )
 
@@ -36,5 +37,26 @@ func TestCMapElements(t *testing.T) {
 	}
 	for element := range cmap.Elements() {
 		t.Log("Key:", element.Key, ",Value:", element.Value)
+	}
+}
+
+func TestCMapSetGet(t *testing.T) {
+	var keys []string
+	keyValue := "test"
+	for i := 1; i <= 10; i++ {
+		keyValue = fmt.Sprintf("%s%d", keyValue, i)
+		keys = append(keys, keyValue)
+	}
+	fmt.Println(keys)
+	cmap := NewConcurrencyMap()
+	for _, v := range keys {
+		cmap.Set(v, v)
+	}
+	for _, v := range keys {
+		val, _ := cmap.Get(v)
+		if v != val.(string) {
+			t.Error("Not the desired value:", v, val)
+			return
+		}
 	}
 }
